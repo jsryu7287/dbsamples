@@ -1,14 +1,16 @@
 # Todo Project 
 
+CREATE DATABASE my7287db CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+
 # 스키마 생성 
-use db123456;
+use my7287db;
 
 CREATE TABLE IF NOT EXISTS todos (
     id INT AUTO_INCREMENT PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
     completed BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 
 id → 자동 증가 (PRIMARY KEY)
 title → 할 일 제목 (VARCHAR(255))
