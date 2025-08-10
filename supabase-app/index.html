@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Supabase Todos</title>
+  <style>
+    /* 간단한 스타일 */
+    :root {
+      --bg: #f6f8fa;
+      --card: #fff;
+      --muted: #6b7280;
+      --accent: #2563eb;
+    }
+    body {
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: linear-gradient(180deg, var(--bg), #fff);
+      margin: 0;
+      padding: 32px;
+      display: flex;
+      justify-content: center;
+    }
+    .app {
+      width: 720px;
+      max-width: 96%;
+    }
+    header {
+      display:flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    h1 { margin: 0; font-size: 1.4rem; }
+    .card {
+      background: var(--card);
+      border-radius: 12px;
+      box-shadow: 0 6px 18px rgba(16,24,40,0.06);
+      padding: 16px;
+    }
+    form { display:flex; gap:8px; margin-bottom: 12px; }
+    input[type="text"] {
+      flex:1;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid #e6e9ef;
+      font-size: 14px;
+    }
+    button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 10px 14px;
+      border-radius: 8px;
+      cursor:pointer;
+      font-weight:600;
+    }
+    ul { list-style:none; padding:0; margin:0; }
+    li {
+      display:flex;
+      align-items:center;
+      justify-content: space-between;
+      gap:12px;
+      padding: 10px;
+      border-bottom: 1px solid #f1f3f5;
+    }
+    .meta { color: var(--muted); font-size: 12px; }
+    .left { display:flex; gap:12px; align-items:center; }
+    .title { font-size: 15px; }
+    .completed { text-decoration: line-through; color: #9ca3af; }
+    .actions { display:flex; gap:8px; }
+    .icon-btn {
+      padding:6px 8px;
+      border-radius:8px;
+      background: #f3f4f6;
+      border:none;
+      cursor:pointer;
+      font-size: 13px;
+    }
+    .empty { text-align:center; color:var(--muted); padding: 20px 0; }
+    .status { font-size:13px; color:var(--muted); margin-left:8px; }
+    .small { font-size:12px; color:#9ca3af; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Supabase Todos</h1>
+      <div class="small">간단한 CRUD 예제</div>
+    </header>
+
+    <div class="card">
+      <form id="addForm">
+        <input id="newTitle" type="text" placeholder="새 할 일 입력 후 Enter 또는 추가 버튼" required />
+        <button type="submit">추가</button>
+      </form>
+
+      <div id="status" class="meta">로딩 중...</div>
+
+      <ul id="todoList" aria-live="polite"></ul>
+    </div>
+  </div>
+
+  <!-- supabase-js v2 (ESM) -->
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
+
+    /********** 여기에 Supabase 정보 넣기 **********
+     * 1) SUPABASE_URL: 프로젝트 URL (예: https://abcdxyz.supabase.co)
+     * 2) SUPABASE_ANON_KEY: Project -> API -> anon public key
+     **********************************************/
+    const SUPABASE_URL = 'https://yehlzkcdwbibunnipxta.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InllaGx6a2Nkd2JpYnVubmlweHRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ4MjgxNzQsImV4cCI6MjA3MDQwNDE3NH0.gi9EIVkKHxM622XBxwu_foQwc5tODjnumO0FL8WyuPs';
+
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL.includes('YOUR_')) {
+      document.getElementById('status').textContent = 'Supabase URL/Anon key를 삽입하세요 (코드 상단).';
+      throw new Error('Missing Supabase credentials');
+    }
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // DOM elements
+    const todoList = document.getElementById('todoList');
+    const addForm = document.getElementById('addForm');
+    const newTitle = document.getElementById('newTitle');
+    const status = document.getElementById('status');
+
+    // 초기 로드
+    window.addEventListener('DOMContentLoaded', () => {
+      fetchTodos();
+      subscribeChanges();
+    });
+
+    // Fetch all todos (최신순)
+    async function fetchTodos() {
+      status.textContent = '데이터를 불러오는 중...';
+      try {
+        const { data, error } = await supabase
+          .from('todos')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        renderTodos(data || []);
+        status.textContent = `총 ${ (data || []).length }개`;
+      } catch (err) {
+        console.error(err);
+        status.textContent = '데이터 로드 중 오류가 발생했습니다.';
+      }
+    }
+
+    // 렌더링
+    function renderTodos(items) {
+      todoList.innerHTML = '';
+      if (!items.length) {
+        todoList.innerHTML = '<li class="empty">할 일이 없습니다.</li>';
+        return;
+      }
+
+      for (const t of items) {
+        const li = document.createElement('li');
+        const left = document.createElement('div');
+        left.className = 'left';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = !!t.completed;
+        checkbox.addEventListener('change', () => toggleCompleted(t.id, checkbox.checked));
+
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'title';
+        titleSpan.textContent = t.title;
+        if (t.completed) titleSpan.classList.add('completed');
+
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        const dt = new Date(t.created_at);
+        meta.textContent = dt.toLocaleString();
+
+        left.appendChild(checkbox);
+        left.appendChild(titleSpan);
+        left.appendChild(meta);
+
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'icon-btn';
+        delBtn.textContent = '삭제';
+        delBtn.addEventListener('click', () => deleteTodo(t.id));
+
+        actions.appendChild(delBtn);
+
+        li.appendChild(left);
+        li.appendChild(actions);
+        todoList.appendChild(li);
+      }
+    }
+
+    // 추가
+    addForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const title = newTitle.value.trim();
+      if (!title) return;
+      addForm.querySelector('button').disabled = true;
+      try {
+        const { data, error } = await supabase
+          .from('todos')
+          .insert({ title })
+          .select()
+          .single();
+
+        if (error) throw error;
+        newTitle.value = '';
+        // fetchTodos();   // realtime 구독이 있으면 필요 없음. 하지만 보장하려면 호출해도 무방
+        status.textContent = '추가 완료';
+      } catch (err) {
+        console.error(err);
+        status.textContent = '추가 중 오류';
+      } finally {
+        addForm.querySelector('button').disabled = false;
+      }
+    });
+
+    // 완료 토글
+    async function toggleCompleted(id, completed) {
+      try {
+        const { error } = await supabase
+          .from('todos')
+          .update({ completed })
+          .eq('id', id);
+        if (error) throw error;
+        status.textContent = '업데이트 완료';
+      } catch (err) {
+        console.error(err);
+        status.textContent = '업데이트 실패';
+      }
+    }
+
+    // 삭제
+    async function deleteTodo(id) {
+      if (!confirm('정말 삭제하시겠습니까?')) return;
+      try {
+        const { error } = await supabase
+          .from('todos')
+          .delete()
+          .eq('id', id);
+        if (error) throw error;
+        status.textContent = '삭제 완료';
+      } catch (err) {
+        console.error(err);
+        status.textContent = '삭제 실패';
+      }
+    }
+
+    // Realtime 구독 (다른 클라이언트와 동기화)
+    function subscribeChanges() {
+      // supabase-js v2 uses realtime via "channel"
+      const channel = supabase.channel('public:todos')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'todos' }, payload => {
+          // payload: { eventType: 'INSERT'|'UPDATE'|'DELETE', new: {...}, old: {...} }
+          // 간단하게 다시 전체 fetch
+          fetchTodos();
+        })
+        .subscribe(async (status) => {
+          console.log('realtime status:', status);
+        });
+
+      // 채널 해제는 페이지 언로드시
+      window.addEventListener('beforeunload', () => {
+        supabase.removeChannel(channel);
+      });
+    }
+
+  </script>
+</body>
+</html>
+
